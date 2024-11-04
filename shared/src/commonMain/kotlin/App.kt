@@ -7,7 +7,7 @@ import org.jetbrains.compose.resources.ExperimentalResourceApi
 fun App() {
     MaterialTheme {
 
-        EnhancedCandlestickScreen()
+        EnhancedCandlestickScreen1()
     }
 }
 
