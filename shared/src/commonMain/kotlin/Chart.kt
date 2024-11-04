@@ -2,23 +2,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -30,14 +17,17 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.Random
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
+import kotlin.random.Random
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 data class CandleData(
-    val timestamp: Long,
+    val timestamp: Instant,
     val open: Float,
     val high: Float,
     val low: Float,
@@ -55,19 +45,16 @@ fun CandlestickChart(
 ) {
     val scrollState = rememberScrollState()
     val textMeasurer = rememberTextMeasurer()
-    val dateFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val density = LocalDensity.current
 
     var candleWidth by remember { mutableStateOf(initialCandleWidth) }
     var selectedCandle by remember { mutableStateOf<CandleData?>(null) }
     var touchPosition by remember { mutableStateOf<Offset?>(null) }
 
-    // Fixed dimensions
     val priceAxisWidth = 60.dp
     val timeAxisHeight = 30.dp
     val chartHeight = 300.dp
 
-    // Calculate total content width in pixels first
     val contentWidth = with(density) {
         (candleWidth + candleSpacing) * candles.size + priceAxisWidth.toPx()
     }
@@ -77,7 +64,7 @@ fun CandlestickChart(
             .fillMaxWidth()
             .height(chartHeight + timeAxisHeight)
     ) {
-        // Price axis (vertical)
+        // Price axis
         if (candles.isNotEmpty()) {
             val maxPrice = candles.maxOf { it.high }
             val minPrice = candles.minOf { it.low }
@@ -92,7 +79,7 @@ fun CandlestickChart(
                 repeat(6) { i ->
                     val price = maxPrice - (i * priceStep)
                     Text(
-                        text = "%.1f".format(price),
+                        text = price.toFormattedString(1),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 2.dp),
@@ -109,7 +96,7 @@ fun CandlestickChart(
             }
         }
 
-        // Scrollable chart container
+        // Chart container
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -147,14 +134,12 @@ fun CandlestickChart(
                         val priceRange = maxPrice - minPrice
                         val heightPerPrice = size.height / priceRange
 
-                        // Draw background grid (optional)
                         drawRect(Color(0xFF1E1E1E))
 
                         candles.forEachIndexed { index, candle ->
                             val x = index * (candleWidth + candleSpacing) + candleSpacing
                             val color = if (candle.close >= candle.open) bullColor else bearColor
 
-                            // Draw candle body
                             val top = (maxPrice - maxOf(candle.open, candle.close)) * heightPerPrice
                             val bottom =
                                 (maxPrice - minOf(candle.open, candle.close)) * heightPerPrice
@@ -168,7 +153,6 @@ fun CandlestickChart(
                                 )
                             )
 
-                            // Draw wicks
                             val centerX = x + candleWidth / 2
                             drawLine(
                                 color = color,
@@ -197,13 +181,9 @@ fun CandlestickChart(
                         .fillMaxHeight()
                 ) {
                     if (candles.isNotEmpty()) {
-                        val textLayoutResult = textMeasurer.measure(
-                            text = dateFormatter.format(Date()),
-                            style = TextStyle(fontSize = 10.sp)
-                        )
                         val timeStep = maxOf(
                             1,
-                            (candles.size / (size.width / (textLayoutResult.size.width + 20))).toInt()
+                            (candles.size / (size.width / (candleWidth + 20))).toInt()
                         )
 
                         candles.forEachIndexed { index, candle ->
@@ -215,7 +195,8 @@ fun CandlestickChart(
                                     end = Offset(x + candleWidth / 2, 5f)
                                 )
 
-                                val text = dateFormatter.format(Date(candle.timestamp))
+                                val text =
+                                    candle.timestamp.toLocalDateTime(TimeZone.currentSystemDefault()).hour.toString()
                                 val textLayout = textMeasurer.measure(
                                     text = text,
                                     style = TextStyle(fontSize = 10.sp)
@@ -236,15 +217,17 @@ fun CandlestickChart(
     }
 }
 
+
 @Composable
 fun EnhancedCandlestickScreen() {
     val sampleData = remember {
-        val calendar = Calendar.getInstance()
+        val now = Clock.System.now()
+        val initialTimestamp = now - Duration.minutes(5 * 100)
         List(100) { index ->
-            calendar.add(Calendar.MINUTE, 5)
+            val timestamp = initialTimestamp + index * 5 * 60 * 1000L
             val basePrice = 100f + index * 2
             CandleData(
-                timestamp = calendar.timeInMillis,
+                timestamp = timestamp.toEpochMilliseconds(),
                 open = basePrice + (-5f..5f).random(),
                 high = basePrice + (5f..15f).random(),
                 low = basePrice + (-15f..-5f).random(),
@@ -267,5 +250,19 @@ fun EnhancedCandlestickScreen() {
     }
 }
 
-fun ClosedRange<Float>.random() =
-    Random().nextFloat() * (endInclusive - start) + start
+// Extension function to generate random values within a range
+fun ClosedRange<Float>.random() = Random.nextFloat() * (endInclusive - start) + start
+
+fun Float.toFormattedString(digits: Int): String {
+    val factor = 10.0f.pow(digits) // Use extension function to calculate the power
+    return ((this * factor).toInt() / factor).toString() // Truncate instead of rounding
+}
+
+// Extension function to calculate power of a Float
+fun Float.pow(exp: Int): Float {
+    var result = 1.0f
+    repeat(exp) {
+        result *= this
+    }
+    return result
+}
